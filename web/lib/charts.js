@@ -226,11 +226,11 @@ const LIVE_WEIGHT_HEADROOM = 1.25;
  * scales as shotChart, redrawn as samples arrive. Returns `update(samples)`
  * and `destroy()`.
  */
-export function liveChart(container) {
+export function liveChart(container, { height = 260 } = {}) {
   const c = colors();
   let weightMax = LIVE_MIN_WEIGHT_G;
   const plot = new uPlot({
-    width: container.clientWidth, height: 260,
+    width: container.clientWidth, height,
     cursor: { show: false },
     legend: { show: false },
     scales: {
@@ -409,7 +409,7 @@ export function scatterChart(container, xs, ys, groups, labels, { xLabel, yLabel
     series.push({ label: labels?.[g] ?? String(g), stroke: palette[uniq.indexOf(g) % palette.length], paths: uPlot.paths.points({ size: 7 }), points: { show: true, size: 7 }, value: (u, v) => (v == null ? "" : v) });
   }
   const plot = new uPlot({
-    width: container.clientWidth, height: 260,
+    width: container.clientWidth, height,
     cursor: { drag: { x: false, y: false } },
     legend: { show: false },
     scales: { x: { time }, y: yRange ? { range: yRange } : {} },
@@ -436,7 +436,7 @@ export function bandChart(container, xs, band, latest, { color, unit, medianLabe
   const c = colors();
   const fmt = (v) => `${v.toFixed(digits)} ${unit}`;
   const plot = new uPlot({
-    width: container.clientWidth, height: 260,
+    width: container.clientWidth, height,
     cursor: { drag: { x: false, y: false } },
     legend: { show: false },
     scales: { x: { time: false }, y: { range: (u, min, max) => [0, max == null ? 1 : max * 1.08] } },
@@ -500,7 +500,7 @@ export function fitChart(container, groups, { xLabel, yLabel, unit, digits = 1 }
   });
   if (meta.length) meta[0].x = (v) => `${xLabel} ${v.toFixed(1)}`;
   const plot = new uPlot({
-    width: container.clientWidth, height: 260,
+    width: container.clientWidth, height,
     cursor: { drag: { x: false, y: false } },
     legend: { show: false },
     scales: { x: { time: false }, y: {} },
@@ -536,7 +536,7 @@ export function controlChart(container, points, segments, metric, { unit, digits
   const pointAt = (x) => points[Math.round(x) - 1];
   const fmt = (v) => `${v.toFixed(digits)}${unit ? " " + unit : ""}`;
   const plot = new uPlot({
-    width: container.clientWidth, height: 260,
+    width: container.clientWidth, height,
     cursor: { drag: { x: false, y: false } },
     legend: { show: false },
     scales: { x: { time: false }, y: {} },
