@@ -357,3 +357,21 @@ html.kiosk .view { max-width: none; padding: 0; height: 100%; display: block; }
 .kiosk-maint.warn .gauge > i { background: var(--warn); }
 .kiosk-maint.bad .gauge > i { background: var(--bad); }
 .kiosk-maint .usage { font-size: 13px; color: var(--text-3); margin-top: 6px; }
+/* The coffee being pulled takes the whole display over the swipe screens: it
+   slides in from the right and, once the run has ended, on to its summary.
+   Off screen it stays laid out, so its charts always have a size. */
+.kiosk-live { position: absolute; inset: 0; z-index: 2; overflow: hidden; background: var(--bg);
+              transform: translateX(100%); transition: transform .32s cubic-bezier(.2,.7,.3,1); }
+.kiosk-live.show { transform: none; }
+.kiosk-live-track { display: flex; height: 100%; transition: transform .32s cubic-bezier(.2,.7,.3,1); will-change: transform; }
+.kiosk-live-pane { flex: 0 0 100%; height: 100%; padding: 16px; display: flex; }
+.kiosk-live-pane > .card { flex: 1; min-width: 0; overflow: hidden; padding: 16px 20px; display: flex; flex-direction: column; }
+.kiosk-live-pane .card-head { align-items: center; margin-bottom: 8px; }
+/* .pill sets a display, which would beat the hidden attribute. */
+.kiosk-live .pill[hidden] { display: none; }
+.kiosk-live-stats { display: grid; grid-template-columns: 1.2fr 1.3fr 1fr 1fr 1fr; gap: 12px; align-items: end; margin-bottom: 12px; }
+.kiosk-live-stats .stat .v { font-size: 22px; }
+.kiosk-live-stats .stat.big .v { font-size: 44px; font-weight: 600; letter-spacing: -.9px; line-height: 1.05; }
+.kiosk-summary-stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 12px; }
+.kiosk-summary-stats .stat .v { font-size: 26px; }
+.kiosk-chart { flex: 1; min-height: 0; overflow: hidden; }
