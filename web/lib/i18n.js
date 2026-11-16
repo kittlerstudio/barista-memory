@@ -35,5 +35,16 @@ export function t(key, vars = {}) {
   return s;
 }
 
+/**
+ * A counted phrase: `key.one`, `key.few` or `key.other` by the language's
+ * plural rule (Czech has 1 / 2–4 / 5+: "1 den", "4 dny", "5 dní"), with {n}.
+ * Both dictionaries carry all three, English with few = other.
+ */
+export function tn(key, n) {
+  const category = new Intl.PluralRules(locale()).select(n);
+  const form = dict[`${key}.${category}`] !== undefined ? category : "other";
+  return t(`${key}.${form}`, { n });
+}
+
 /** Locale for Intl formatting, from the UI language. */
 export function locale() { return lang === "cs" ? "cs-CZ" : "en-GB"; }

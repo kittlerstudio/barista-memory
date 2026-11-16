@@ -15,7 +15,7 @@ import { exportArchive, importArchive } from "../transfer.js";
 import { liveStatus, machineReachable } from "../liveStatus.js";
 import { liveTelemetry } from "../liveTelemetry.js";
 import { groupSettings } from "../device/machineSettings.js";
-import { currentConditions, powerSessions, allStateSamples, coldBaseline, type StateRow } from "../machineState.js";
+import { currentConditions, powerSessions, allStateSamples, coldBaseline, machineWarmth, type StateRow } from "../machineState.js";
 import { kioskActivity } from "../kioskActivity.js";
 import { massTemperatureSeries, settledness } from "../thermalModel.js";
 import { changeMode, SWITCHABLE_MODES } from "../machineControl.js";
@@ -190,6 +190,7 @@ route("GET", "/api/kiosk", async (_req, res) => {
     stock: currentStock(db),
     maintenance: maintenanceStatus(db).filter((m) => m.enabled),
     machine: kioskActivity(db),
+    warmth: machineWarmth(db),
     server_time: Math.floor(Date.now() / 1000),
   });
 });

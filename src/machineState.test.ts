@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase } from "./db/db.js";
-import { machineActivity } from "./machineState.js";
+import { machineActivity, machineWarmth } from "./machineState.js";
 
 test("machineActivity: idle since the standby that led into the power-off", () => {
   const dir = mkdtempSync(join(tmpdir(), "bm-activity-"));
@@ -27,6 +27,26 @@ test("machineActivity: idle since the standby that led into the power-off", () =
 
   // The daemon stopped sampling: an old record says nothing about now.
   assert.deepEqual(machineActivity(db, now + 3 * 600 + 1), { state: null, idle_since: null });
+
+  db.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("machineWarmth: the setpoint is the last one the machine heated to, 94 before any", () => {
+  const dir = mkdtempSync(join(tmpdir(), "bm-warmth-"));
+  const db = openDatabase(join(dir, "archive.db"));
+  const now = 1_800_000_000;
+  assert.equal(machineWarmth(db, now).setpoint_c, 94);
+  assert.equal(machineWarmth(db, now).settledness, null);
+
+  const insert = db.prepare("INSERT INTO machine_state (sampled_at, reachable, mode, target_temp, current_temp) VALUES (?, ?, ?, ?, ?)");
+  insert.run(now - 7200, 1, 0, 0, 20); // cold, in standby
+  insert.run(now - 3600, 1, 1, 93, 60); // heating to 93
+  insert.run(now - 600, 1, 0, 0, 90); // standby again: the target reads 0
+  const w = machineWarmth(db, now);
+  assert.equal(w.setpoint_c, 93);
+  assert.equal(w.cold_baseline_c, 20);
+  assert.ok(w.settledness != null && w.settledness > 0 && w.settledness <= 100);
 
   db.close();
   rmSync(dir, { recursive: true, force: true });
