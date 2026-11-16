@@ -48,7 +48,7 @@
   "now.dose": "dose",
   "kiosk.finer": "Finer",
   "kiosk.coarser": "Coarser",
-  "kiosk.stock.left": "About {g} g left",
+  "kiosk.stock.left": "{g} g left",
   "kiosk.stock.lasts": "lasts {days}",
   "kiosk.stock.days.one": "{n} day",
   "kiosk.stock.days.few": "{n} days",

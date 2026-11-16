@@ -48,7 +48,7 @@
   "now.dose": "dávka",
   "kiosk.finer": "Jemněji",
   "kiosk.coarser": "Hruběji",
-  "kiosk.stock.left": "Zbývá asi {g} g",
+  "kiosk.stock.left": "Zbývá {g} g",
   "kiosk.stock.lasts": "vydrží {days}",
   "kiosk.stock.days.one": "{n} den",
   "kiosk.stock.days.few": "{n} dny",
