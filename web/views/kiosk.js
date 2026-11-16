@@ -1,4 +1,4 @@
-import { t } from "../lib/i18n.js";
+import { t, tn } from "../lib/i18n.js";
 import { api } from "../lib/api.js";
 import { fmt, toast } from "../lib/fmt.js";
 import { usage, tone } from "../lib/maintenance.js";
@@ -38,24 +38,55 @@ const ARCHIVE_WAIT_MS = 3 * 60_000;
 /** An archived shot that started this close to the run is the run. */
 const ARCHIVE_MATCH_S = 30;
 
-function brewingCard(data, grind) {
+const PLUS = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M7.5 24.5H40.5M24 8V41"/></svg>`;
+const MINUS = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M7.5 24.5H40.5"/></svg>`;
+
+/** "Zbývá asi 298 g / vydrží 4 dny / 12 shotů": what the bag has left, by weight, time and coffees. */
+function stockLine(stock, dose) {
+  const parts = [t("kiosk.stock.left", { g: stock.remaining_g })];
+  if (stock.days_left != null) parts.push(t("kiosk.stock.lasts", { days: tn("kiosk.stock.days", stock.days_left) }));
+  if (dose > 0) parts.push(tn("kiosk.stock.shots", Math.floor(stock.remaining_g / dose)));
+  return parts.join(" / ");
+}
+
+function tile(key, label, unit) {
+  return `<div class="kiosk-tile"><span class="l">${label}</span><span class="v num"><b data-tile="${key}">–</b> <small>${unit}</small></span></div>`;
+}
+
+/**
+ * The first screen: the coffee in the grinder and the machine's state on the
+ * left, the grind and its +/- on the right, where a thumb reaches it.
+ */
+function homeScreen(data, grind) {
   const s = data.setup;
-  if (!s) return `<section class="card"><div class="card-head"><h2>${t("now.brewing")}</h2></div><p class="muted">${t("now.no_setup")}</p></section>`;
+  const coffee = s ? `
+      <div class="kiosk-coffee">
+        <div class="what">
+          <h2>${t("now.brewing")}</h2>
+          <div class="bean">${s.bean ?? "?"}</div>
+          <div class="roaster">${s.roaster ?? ""}</div>
+          <div class="since">${t("setup.since")} ${fmt.dateTime(s.valid_from)}</div>
+          ${data.stock?.remaining_g != null ? `<p class="stock">${data.stock.low ? `<span class="pill warn">${t("now.stock_low")}</span>` : ""}<span>${stockLine(data.stock, s.dose_g)}</span></p>` : ""}
+        </div>
+        <div class="dose">
+          <h2>${t("now.dose")}</h2>
+          <div class="num">${s.dose_g != null ? s.dose_g + "g" : "–"}</div>
+        </div>
+      </div>` : `<div><h2>${t("now.brewing")}</h2><p class="muted">${t("now.no_setup")}</p></div>`;
   return `
-    <section class="card brewing-card">
-      <h2>${t("now.brewing")}</h2>
-      <div class="bean">${s.bean ?? "?"}</div>
-      <div class="roaster">${s.roaster ?? ""}${s.roast_date ? " · " + s.roast_date : ""}</div>
-      <p class="since">${t("setup.since")} ${fmt.dateTime(s.valid_from)}</p>
-      ${data.stock?.remaining_g != null ? `<p class="stock">${data.stock.low ? `<span class="pill warn">${t("now.stock_low")}</span> ` : ""}${t("now.stock", { g: data.stock.remaining_g, days: data.stock.days_left != null ? t("coffees.days", { n: data.stock.days_left }) : "–" })}</p>` : ""}
-      <div class="label grind-label">${t("now.grind")}</div>
-      <div class="stepper">
-        <button type="button" data-grind="-1" aria-label="${t("kiosk.finer")}">−</button>
-        <span class="value num" data-grind-value>${grind ?? "–"}</span>
-        <button type="button" data-grind="1" aria-label="${t("kiosk.coarser")}">+</button>
+    <section class="card kiosk-home">
+      ${coffee}
+      <div class="kiosk-machine">
+        <h2>${t("kiosk.machine.title")}</h2>
+        <div class="tiles">
+          ${tile("boiler", t("kiosk.machine.boiler"), "%")}${tile("warm", t("kiosk.machine.warm"), "%")}${tile("pressure", t("kiosk.machine.pressure"), "bar")}
+        </div>
       </div>
-      <div class="dose num">${s.dose_g != null ? s.dose_g + " g" : "–"}</div>
-      <div class="label">${t("now.dose")}</div>
+    </section>
+    <section class="card kiosk-grind">
+      <button type="button" data-grind="1" aria-label="${t("kiosk.coarser")}">${PLUS}</button>
+      <span class="value num" data-grind-value>${grind ?? "–"}</span>
+      <button type="button" data-grind="-1" aria-label="${t("kiosk.finer")}">${MINUS}</button>
     </section>`;
 }
 
@@ -146,8 +177,28 @@ export async function renderKiosk(view) {
   const dots = [...view.querySelectorAll(".kiosk-dots i")];
 
   const draw = () => {
-    screens[0].innerHTML = brewingCard(latest, pendingGrind ?? latest.setup?.grind_setting);
+    screens[0].innerHTML = homeScreen(latest, pendingGrind ?? latest.setup?.grind_setting);
     screens[1].innerHTML = maintenanceCard(latest);
+    paintTiles();
+  };
+  // ---- the machine's state -----------------------------------------------
+  // The boiler and the pressure follow the live stream; the machine's warmth
+  // is the server's thermal model, as fresh as the last api/kiosk.
+  /** The latest live status; null while the stream says the machine is off. */
+  let status = null;
+  const paintTiles = () => {
+    const cell = (key) => screens[0].querySelector(`[data-tile="${key}"]`);
+    const w = latest.warmth;
+    const ct = status?.temperature.current;
+    const setpoint = status?.temperature.target > 0 ? status.temperature.target : w?.setpoint_c;
+    let boiler = null;
+    if (ct != null && w && setpoint > w.cold_baseline_c) {
+      boiler = Math.round(Math.max(0, Math.min(1, (ct - w.cold_baseline_c) / (setpoint - w.cold_baseline_c))) * 100);
+    }
+    const pressure = status?.pressure.current;
+    if (cell("boiler")) cell("boiler").textContent = boiler ?? "–";
+    if (cell("warm")) cell("warm").textContent = w?.settledness ?? "–";
+    if (cell("pressure")) cell("pressure").textContent = pressure != null ? Math.max(0, pressure).toFixed(1) : "–";
   };
   const place = (offsetPx = 0) => {
     track.style.transform = `translateX(calc(${-index * 100}% + ${offsetPx}px))`;
@@ -414,7 +465,8 @@ export async function renderKiosk(view) {
   let subscribing = true;
   const stopLive = watchLive({
     onRun: (samples) => { if (!subscribing) onRun(samples); },
-    onOffline: () => (liveCell("offline").hidden = false),
+    onStatus: (next) => { status = next; paintTiles(); },
+    onOffline: () => { liveCell("offline").hidden = false; status = null; paintTiles(); },
     onOnline: () => (liveCell("offline").hidden = true),
   });
   subscribing = false;

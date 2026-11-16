@@ -403,6 +403,32 @@ export function allStateSamples(db: DatabaseSync): StateRow[] {
   return db.prepare("SELECT * FROM machine_state ORDER BY sampled_at ASC").all() as unknown as StateRow[];
 }
 
+/** The brew setpoint when the record holds none: what currentConditions() assumes too. */
+const DEFAULT_SETPOINT_C = 94;
+
+export interface MachineWarmth {
+  /** Thermal mass, 0–100 of the way from cold to the setpoint (as in currentConditions). */
+  settledness: number | null;
+  /** The cold level and the setpoint, so the kiosk can scale the live boiler reading the same way. */
+  cold_baseline_c: number;
+  setpoint_c: number;
+}
+
+/**
+ * How warm the machine is, from the record alone — for the kiosk, which
+ * never asks the machine. In standby the target reads 0, so the setpoint is
+ * the last one the machine heated to.
+ */
+export function machineWarmth(db: DatabaseSync, now = Math.floor(Date.now() / 1000)): MachineWarmth {
+  const baseline = coldBaseline(db, now);
+  const row = db
+    .prepare("SELECT target_temp FROM machine_state WHERE target_temp > 0 ORDER BY sampled_at DESC LIMIT 1")
+    .get() as { target_temp: number } | undefined;
+  const setpoint = row?.target_temp ?? DEFAULT_SETPOINT_C;
+  const mass = massTemperatureAt(allStateSamples(db), now, baseline);
+  return { settledness: mass == null ? null : settledness(mass, setpoint, baseline), cold_baseline_c: baseline, setpoint_c: setpoint };
+}
+
 /** Rows read back to find where an idle stretch began; 500 heartbeats are over three days. */
 const IDLE_LOOKBACK_ROWS = 500;
 
