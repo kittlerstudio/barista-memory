@@ -351,7 +351,7 @@ html.kiosk .view { max-width: none; padding: 0; height: 100%; display: block; }
 .kiosk-home .stock { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 18px; white-space: nowrap; }
 .kiosk-home .stock .pill { font-size: 18px; color: var(--text); }
 .kiosk-home .stock .pill.warn { color: var(--warn); }
-.kiosk-machine .tiles { display: flex; gap: 7px; }
+.kiosk-machine .tiles { display: flex; justify-content: space-between; }
 .kiosk-tile { flex: 0 0 158px; display: flex; flex-direction: column; gap: 5px; padding: 7px 12px; }
 .kiosk-tile .l { font-size: 18px; color: var(--text-2); }
 /* Number and unit on one baseline without the line box growing past 43.2 px. */
