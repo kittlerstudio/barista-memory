@@ -331,28 +331,31 @@ html.kiosk .view { max-width: none; padding: 0; height: 100%; display: block; }
 .kiosk-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); transition: background .2s; }
 .kiosk-dots i.active { background: var(--accent); }
 .kiosk .card h2 { font-size: 16px; font-weight: 500; letter-spacing: .055em; }
-/* Screen 1: the coffee and the machine on the left, the grind on the right
-   (Figma "Kiosk / 1 Co se mele"). */
-.kiosk-screen > .kiosk-home { display: flex; flex-direction: column; justify-content: space-between; padding: 19px 24px; line-height: normal; }
-.kiosk-screen > .kiosk-grind { flex: 0 0 208px; margin-left: 16px; padding: 8px;
+/* Screen 1: the coffee above the machine's state on the left, the grind on
+   the right (Figma "Kiosk / 1 Co se mele"). */
+.kiosk-screen > .kiosk-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.kiosk-left > .card { padding: 19px 24px; line-height: normal; display: flex; flex-direction: column; justify-content: space-between; }
+.kiosk-left > .kiosk-home { flex: 1; min-height: 0; }
+.kiosk-left > .kiosk-machine { flex: 0 0 167px; }
+.kiosk-screen > .kiosk-grind { flex: 0 0 163px; margin-left: 16px; padding: 8px;
                                display: flex; flex-direction: column; align-items: center; justify-content: space-between; }
 .kiosk .card h2 { margin: 0; }
 .kiosk-coffee { display: flex; gap: 15px; }
 .kiosk-coffee .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .kiosk-coffee .bean { font-size: 36px; font-weight: 600; letter-spacing: -.3px; line-height: 43.2px; padding-top: 2px;
                       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kiosk-coffee .roaster { font-size: 16px; color: var(--text-2); }
-.kiosk-coffee .since { font-size: 16px; color: var(--text-3); }
-.kiosk-coffee .stock { display: flex; align-items: center; gap: 8px; margin: 16px 0 0; font-size: 16px; white-space: nowrap; }
-.kiosk-coffee .stock .pill { font-size: 16px; }
+.kiosk-coffee .roaster { font-size: 18px; color: var(--text-2); }
+.kiosk-coffee .since { font-size: 18px; color: var(--text-3); }
 .kiosk-coffee .dose { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .kiosk-coffee .dose .num { font-size: 36px; font-weight: 600; letter-spacing: -.3px; line-height: 43.2px; }
-.kiosk-machine h2 { margin-bottom: 16px !important; }
-.kiosk-machine .tiles { display: flex; gap: 10px; height: 141px; }
-.kiosk-tile { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 7px 12px;
-              background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px; }
-.kiosk-tile .l { font-size: 16px; color: var(--text-2); }
-.kiosk-tile .v { line-height: 43.2px; letter-spacing: -.3px; white-space: nowrap; }
+.kiosk-home .stock { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 18px; white-space: nowrap; }
+.kiosk-home .stock .pill { font-size: 18px; color: var(--text); }
+.kiosk-home .stock .pill.warn { color: var(--warn); }
+.kiosk-machine .tiles { display: flex; gap: 7px; }
+.kiosk-tile { flex: 0 0 158px; display: flex; flex-direction: column; gap: 5px; padding: 7px 12px; }
+.kiosk-tile .l { font-size: 18px; color: var(--text-2); }
+/* Number and unit on one baseline without the line box growing past 43.2 px. */
+.kiosk-tile .v { display: flex; align-items: baseline; gap: 9px; height: 43.2px; line-height: 43.2px; letter-spacing: -.3px; white-space: nowrap; }
 .kiosk-tile .v b { font-size: 36px; font-weight: 600; }
 .kiosk-tile .v small { font-size: 24px; font-weight: 300; }
 /* The grind's buttons are far larger than their glyphs: a thumb, often a
@@ -361,7 +364,7 @@ html.kiosk .view { max-width: none; padding: 0; height: 100%; display: block; }
                       background: #2b2822; cursor: pointer; }
 .kiosk-grind button:active { background: var(--line-2); }
 .kiosk-grind svg path { fill: none; stroke: #fff; stroke-opacity: .8; stroke-width: 3; stroke-linecap: round; }
-.kiosk-grind .value { font-size: 64px; font-weight: 600; letter-spacing: -.3px; line-height: 43.2px; }
+.kiosk-grind .value { font-size: 48px; font-weight: 600; letter-spacing: -.3px; line-height: 43.2px; }
 .kiosk .maint-card { display: flex; flex-direction: column; gap: 18px; }
 .kiosk-maint .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .kiosk-maint .head b { font-size: 22px; font-weight: 600; letter-spacing: -.44px; }

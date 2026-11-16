@@ -41,21 +41,25 @@ const ARCHIVE_MATCH_S = 30;
 const PLUS = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M7.5 24.5H40.5M24 8V41"/></svg>`;
 const MINUS = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M7.5 24.5H40.5"/></svg>`;
 
-/** "Zbývá asi 298 g / vydrží 4 dny / 12 shotů": what the bag has left, by weight, time and coffees. */
-function stockLine(stock, dose) {
-  const parts = [t("kiosk.stock.left", { g: stock.remaining_g })];
-  if (stock.days_left != null) parts.push(t("kiosk.stock.lasts", { days: tn("kiosk.stock.days", stock.days_left) }));
-  if (dose > 0) parts.push(tn("kiosk.stock.shots", Math.floor(stock.remaining_g / dose)));
-  return parts.join(" / ");
+/** "Zbývá 298 g" and "vydrží 4 dny / 12 shotů": what the bag has left, by weight, then by time and coffees. */
+function stockRow(stock, dose) {
+  const lasts = [];
+  if (stock.days_left != null) lasts.push(t("kiosk.stock.lasts", { days: tn("kiosk.stock.days", stock.days_left) }));
+  if (dose > 0) lasts.push(tn("kiosk.stock.shots", Math.floor(stock.remaining_g / dose)));
+  return `
+        <div class="stock">
+          <span class="pill ${stock.low ? "warn" : ""}">${t("kiosk.stock.left", { g: stock.remaining_g })}</span>
+          <span>${lasts.join(" / ")}</span>
+        </div>`;
 }
 
 function tile(key, label, unit) {
-  return `<div class="kiosk-tile"><span class="l">${label}</span><span class="v num"><b data-tile="${key}">–</b> <small>${unit}</small></span></div>`;
+  return `<div class="kiosk-tile"><span class="v num"><b data-tile="${key}">–</b> <small>${unit}</small></span><span class="l">${label}</span></div>`;
 }
 
 /**
- * The first screen: the coffee in the grinder and the machine's state on the
- * left, the grind and its +/- on the right, where a thumb reaches it.
+ * The first screen: the coffee in the grinder above the machine's state on
+ * the left, the grind and its +/- on the right, where a thumb reaches it.
  */
 function homeScreen(data, grind) {
   const s = data.setup;
@@ -66,23 +70,23 @@ function homeScreen(data, grind) {
           <div class="bean">${s.bean ?? "?"}</div>
           <div class="roaster">${s.roaster ?? ""}</div>
           <div class="since">${t("setup.since")} ${fmt.dateTime(s.valid_from)}</div>
-          ${data.stock?.remaining_g != null ? `<p class="stock">${data.stock.low ? `<span class="pill warn">${t("now.stock_low")}</span>` : ""}<span>${stockLine(data.stock, s.dose_g)}</span></p>` : ""}
         </div>
         <div class="dose">
           <h2>${t("now.dose")}</h2>
           <div class="num">${s.dose_g != null ? s.dose_g + "g" : "–"}</div>
         </div>
-      </div>` : `<div><h2>${t("now.brewing")}</h2><p class="muted">${t("now.no_setup")}</p></div>`;
+      </div>
+      ${data.stock?.remaining_g != null ? stockRow(data.stock, s.dose_g) : ""}` : `<div><h2>${t("now.brewing")}</h2><p class="muted">${t("now.no_setup")}</p></div>`;
   return `
-    <section class="card kiosk-home">
-      ${coffee}
-      <div class="kiosk-machine">
+    <div class="kiosk-left">
+      <section class="card kiosk-home">${coffee}</section>
+      <section class="card kiosk-machine">
         <h2>${t("kiosk.machine.title")}</h2>
         <div class="tiles">
           ${tile("boiler", t("kiosk.machine.boiler"), "%")}${tile("warm", t("kiosk.machine.warm"), "%")}${tile("pressure", t("kiosk.machine.pressure"), "bar")}
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
     <section class="card kiosk-grind">
       <button type="button" data-grind="1" aria-label="${t("kiosk.coarser")}">${PLUS}</button>
       <span class="value num" data-grind-value>${grind ?? "–"}</span>
