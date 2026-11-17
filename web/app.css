@@ -322,7 +322,7 @@ html.kiosk, html.kiosk body { height: 100%; overflow: hidden; overscroll-behavio
 html.kiosk { scrollbar-gutter: auto; }
 html.kiosk .top { display: none; }
 html.kiosk .view { max-width: none; padding: 0; height: 100%; display: block; }
-.kiosk-frame { position: relative; height: 100%; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.kiosk-frame { position: relative; height: 100%; overflow: hidden; overflow: clip; touch-action: none; user-select: none; -webkit-user-select: none; }
 .kiosk-track { display: flex; height: 100%; transition: transform .28s cubic-bezier(.2,.7,.3,1); will-change: transform; }
 .kiosk-track.dragging { transition: none; }
 .kiosk-screen { flex: 0 0 100%; height: 100%; padding: 16px 16px 16px; display: flex; }
@@ -348,7 +348,9 @@ html.kiosk .view { max-width: none; padding: 0; height: 100%; display: block; }
 .kiosk-coffee .since { font-size: 18px; color: var(--text-3); }
 .kiosk-coffee .dose { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .kiosk-coffee .dose .num { font-size: 36px; font-weight: 600; letter-spacing: -.3px; line-height: 43.2px; }
-.kiosk-home .stock { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 18px; white-space: nowrap; }
+/* The stock row is a button: a tap opens the weighing. */
+.kiosk-home .stock { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 0;
+                     border: 0; background: none; text-align: left; font-size: 18px; white-space: nowrap; cursor: pointer; }
 .kiosk-home .stock .pill { font-size: 18px; color: var(--text); }
 .kiosk-home .stock .pill.warn { color: var(--warn); }
 .kiosk-machine .tiles { display: flex; justify-content: space-between; }
@@ -393,3 +395,20 @@ html.kiosk .view { max-width: none; padding: 0; height: 100%; display: block; }
 .kiosk-summary-stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 12px; }
 .kiosk-summary-stats .stat .v { font-size: 26px; }
 .kiosk-chart { flex: 1; min-height: 0; overflow: hidden; }
+/* Weighing what is left of the bag: over everything, the scale's reading large.
+   The frame clips rather than hides its overflow: a focused button could
+   otherwise scroll it sideways and pull the off-screen live layer in. */
+.kiosk-calib { position: absolute; inset: 0; z-index: 3; padding: 16px; display: flex; background: var(--bg);
+               opacity: 0; pointer-events: none; transition: opacity .2s; }
+.kiosk-calib.show { opacity: 1; pointer-events: auto; }
+.kiosk-calib-card { flex: 1; min-width: 0; padding: 19px 24px; display: flex; flex-direction: column; line-height: normal; }
+.kiosk-calib-card .card-head { align-items: center; margin-bottom: 0; }
+.kiosk-calib-card .pill[hidden] { display: none; }
+.kiosk-calib-card .hint { margin: 18px 0 0; font-size: 22px; }
+.kiosk-calib-card .weight { flex: 1; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.kiosk-calib-card .weight b { font-size: 112px; font-weight: 600; letter-spacing: -2px; line-height: 1; }
+.kiosk-calib-card .weight small { font-size: 40px; font-weight: 300; color: var(--text-2); }
+.kiosk-calib-card .sub { margin: 0 0 16px; text-align: center; font-size: 18px; color: var(--text-2); min-height: 22px; }
+.kiosk-calib-card .actions { display: flex; gap: 12px; }
+.kiosk-calib-card .actions .btn { flex: 1; height: 80px; border-radius: 10px; font-size: 22px; }
+.kiosk-calib-card .actions .btn[hidden] { display: none; }

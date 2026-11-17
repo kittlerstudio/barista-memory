@@ -27,7 +27,7 @@ import { setCaption, CAPTION_MAX_CHARS } from "../captions.js";
 import { grindScale, grinderPreferences } from "../grinder.js";
 import { recordSetup, updateSetup } from "../setups.js";
 import { listCoffees, coffeeSummary, createCoffee, updateCoffee } from "../coffees.js";
-import { agingPoints, bags, currentStock, stockWarnG } from "../coffeeStats.js";
+import { agingPoints, bags, calibrateStock, currentStock, stockWarnG } from "../coffeeStats.js";
 import { suggestFor, verdictFor } from "../dialin.js";
 import { getAnalysis, analysesFor } from "../anomaly.js";
 import { exportSetupCard, importSetupCard } from "../setupCard.js";
@@ -199,6 +199,17 @@ route("GET", "/api/kiosk", async (_req, res) => {
 // machine's state alone, without the setup and maintenance api/kiosk adds.
 route("GET", "/api/kiosk/machine", async (_req, res) => {
   json(res, 200, { machine: kioskActivity(db), server_time: Math.floor(Date.now() / 1000) });
+});
+
+// What is left of the current bag, weighed (the kiosk reads it off the
+// machine's Bluetooth scale): the stock counts down from it from now on.
+route("POST", "/api/stock/calibrate", async (req, res) => {
+  const body = await readJson(req);
+  try {
+    json(res, 200, { stock: calibrateStock(db, Number(body.measured_g)) });
+  } catch (error) {
+    json(res, 400, { error: "INVALID", message: error instanceof Error ? error.message : String(error) });
+  }
 });
 
 route("GET", "/api/now", async (_req, res) => {

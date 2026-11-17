@@ -94,6 +94,18 @@ CREATE TABLE IF NOT EXISTS coffees (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS coffees_identity ON coffees (name, COALESCE(roaster, ''));
 
+-- A weighing of what is left of a bag (a coffee and its roast date). The
+-- remaining stock counts down from the latest one instead of from the bag's
+-- nominal weight, which misses purges, retention and spills.
+CREATE TABLE IF NOT EXISTS stock_calibrations (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  coffee_id   INTEGER NOT NULL REFERENCES coffees(id),
+  roast_date  TEXT,
+  measured_g  REAL NOT NULL,
+  measured_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS stock_calibrations_bag ON stock_calibrations (coffee_id, roast_date, measured_at);
+
 -- The brewing context, stored as intervals rather than per shot.
 --
 -- Beans, grind setting and dose change once every many shots, so a row here
