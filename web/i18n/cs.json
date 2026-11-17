@@ -57,7 +57,7 @@
   "kiosk.stock.shots.few": "{n} shoty",
   "kiosk.stock.shots.other": "{n} shotů",
   "kiosk.machine.title": "Stav kávovaru",
-  "kiosk.machine.boiler": "nahřátí bojleru",
+  "kiosk.machine.boiler": "teplota bojleru",
   "kiosk.machine.warm": "nahřátí stroje",
   "kiosk.machine.pressure": "tlak",
   "kiosk.calib.title": "Zvážit zbytek kávy",

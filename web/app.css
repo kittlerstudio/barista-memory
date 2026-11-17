@@ -360,6 +360,7 @@ html.kiosk .view { max-width: none; padding: 0; height: 100%; display: block; }
 .kiosk-tile .v { display: flex; align-items: baseline; gap: 9px; height: 43.2px; line-height: 43.2px; letter-spacing: -.3px; white-space: nowrap; }
 .kiosk-tile .v b { font-size: 36px; font-weight: 600; }
 .kiosk-tile .v small { font-size: 24px; font-weight: 300; }
+.kiosk-tile.ready .v { color: var(--accent); }
 /* The grind's buttons are far larger than their glyphs: a thumb, often a
    wet one, at arm's length. */
 .kiosk-grind button { width: 100%; height: 91px; display: grid; place-items: center; border: 0; border-radius: 10px;

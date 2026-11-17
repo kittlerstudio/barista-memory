@@ -40,6 +40,10 @@ const ARCHIVE_MATCH_S = 30;
 /** A weighing is steady once the scale has moved less than this over the window. */
 const STEADY_G = 0.3;
 const STEADY_MS = 1500;
+/** The boiler counts as at the profile's temperature within this much below it. */
+const BOILER_READY_C = 1;
+/** From this settledness the machine is warm enough for a coffee. */
+const WARM_READY_PCT = 80;
 
 const PLUS = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M7.5 24.5H40.5M24 8V41"/></svg>`;
 const MINUS = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M7.5 24.5H40.5"/></svg>`;
@@ -105,7 +109,7 @@ function homeScreen(data, grind) {
       <section class="card kiosk-machine">
         <h2>${t("kiosk.machine.title")}</h2>
         <div class="tiles">
-          ${tile("boiler", t("kiosk.machine.boiler"), "%")}${tile("warm", t("kiosk.machine.warm"), "%")}${tile("pressure", t("kiosk.machine.pressure"), "bar")}
+          ${tile("boiler", t("kiosk.machine.boiler"), "°C")}${tile("warm", t("kiosk.machine.warm"), "%")}${tile("pressure", t("kiosk.machine.pressure"), "bar")}
         </div>
       </section>
     </div>
@@ -218,14 +222,14 @@ export async function renderKiosk(view) {
     const w = latest.warmth;
     const ct = status?.temperature.current;
     const setpoint = status?.temperature.target > 0 ? status.temperature.target : w?.setpoint_c;
-    let boiler = null;
-    if (ct != null && w && setpoint > w.cold_baseline_c) {
-      boiler = Math.round(Math.max(0, Math.min(1, (ct - w.cold_baseline_c) / (setpoint - w.cold_baseline_c))) * 100);
-    }
     const pressure = status?.pressure.current;
-    if (cell("boiler")) cell("boiler").textContent = boiler ?? "–";
-    if (cell("warm")) cell("warm").textContent = w?.settledness ?? "–";
-    if (cell("pressure")) cell("pressure").textContent = pressure != null ? Math.max(0, pressure).toFixed(1) : "–";
+    if (!cell("boiler")) return;
+    cell("boiler").textContent = ct != null ? Math.round(ct) : "–";
+    // Orange once the boiler holds the profile's temperature, or the group is warm enough to pull.
+    cell("boiler").closest(".kiosk-tile").classList.toggle("ready", ct != null && setpoint > 0 && ct >= setpoint - BOILER_READY_C);
+    cell("warm").textContent = w?.settledness ?? "–";
+    cell("warm").closest(".kiosk-tile").classList.toggle("ready", (w?.settledness ?? 0) >= WARM_READY_PCT);
+    cell("pressure").textContent = pressure != null ? Math.max(0, pressure).toFixed(1) : "–";
   };
   const place = (offsetPx = 0) => {
     track.style.transform = `translateX(calc(${-index * 100}% + ${offsetPx}px))`;
