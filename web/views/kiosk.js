@@ -44,6 +44,8 @@ const STEADY_MS = 1500;
 const BOILER_READY_C = 1;
 /** From this settledness the machine is warm enough for a coffee. */
 const WARM_READY_PCT = 80;
+/** A summary this soon after the run's end takes the dose off the stock ahead of the archive. */
+const DEDUCT_FRESH_MS = 15_000;
 
 const PLUS = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M7.5 24.5H40.5M24 8V41"/></svg>`;
 const MINUS = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M7.5 24.5H40.5"/></svg>`;
@@ -207,8 +209,26 @@ export async function renderKiosk(view) {
   const screens = [...view.querySelectorAll(".kiosk-screen")];
   const dots = [...view.querySelectorAll(".kiosk-dots i")];
 
+  // ---- the stock, ahead of the archive -----------------------------------
+  // A coffee's dose leaves the stock when ingest archives the shot, ~30 s
+  // after the summary. The kiosk takes it off at the summary already; the
+  // server deducts the setup's dose, not the cup's weight, so the figure is
+  // the one the archive will give. It holds until the archive has the shot,
+  // a weighing replaces the count, or ARCHIVE_WAIT_MS passes (a run the
+  // firmware discarded never arrives, and its dose comes back). A server
+  // figure that moved meanwhile (the minute's refresh caught the archived
+  // shot first) already counts it, so it is shown as it is.
+  /** { key: runKey, g, from: remaining_g it was taken from, until }, or null. */
+  let deducted = null;
+  const shown = () => {
+    const stock = latest.stock;
+    if (!deducted || Date.now() > deducted.until || stock?.remaining_g !== deducted.from) return latest;
+    const g = Math.max(0, Math.round((stock.remaining_g - deducted.g) * 10) / 10);
+    return { ...latest, stock: { ...stock, remaining_g: g } };
+  };
+
   const draw = () => {
-    screens[0].innerHTML = homeScreen(latest, pendingGrind ?? latest.setup?.grind_setting);
+    screens[0].innerHTML = homeScreen(shown(), pendingGrind ?? latest.setup?.grind_setting);
     screens[1].innerHTML = maintenanceCard(latest);
     paintTiles();
   };
@@ -237,8 +257,13 @@ export async function renderKiosk(view) {
   };
   draw(); place();
 
-  const refresh = async () => {
-    try { latest = await api.kiosk(); draw(); } catch { /* the next poll tries again */ }
+  /** `settled`: the server's stock now counts the dose taken off ahead. */
+  const refresh = async ({ settled = false } = {}) => {
+    try {
+      latest = await api.kiosk();
+      if (settled) deducted = null;
+      draw();
+    } catch { /* the next poll tries again */ }
   };
 
   // ---- grind -------------------------------------------------------------
@@ -370,7 +395,7 @@ export async function renderKiosk(view) {
             };
             paintSummary();
           }
-          await refresh();
+          await refresh({ settled: true });
           return;
         }
       } catch { /* the next poll tries again */ }
@@ -383,6 +408,15 @@ export async function renderKiosk(view) {
     mode = "summary";
     summary = { ...runSummary(samples, latest.setup?.dose_g), archived: false };
     paintSummary();
+    // Once per run, and only for a run that just ended: a reconnect showing the
+    // same summary again takes nothing more, and a page loaded long after the
+    // coffee may already have the archived shot in its stock.
+    const dose = latest.setup?.dose_g;
+    const fresh = Date.now() - summary.endedAt < DEDUCT_FRESH_MS;
+    if (fresh && dose > 0 && latest.stock?.remaining_g != null && deducted?.key !== runKey) {
+      deducted = { key: runKey, g: dose, from: latest.stock.remaining_g, until: Date.now() + ARCHIVE_WAIT_MS };
+      draw();
+    }
     summaryView ??= chartIn(summaryPane);
     summaryView.update(samples);
     showPane(1);
@@ -492,7 +526,7 @@ export async function renderKiosk(view) {
       await api.calibrateStock(grams);
       toast(t("kiosk.calib.saved", { g: grams.toFixed(1) }));
       closeCalib();
-      await refresh();
+      await refresh({ settled: true });
     } catch (err) {
       toast(err.message, "bad");
       paintCalib();
