@@ -37,20 +37,42 @@ const ARCHIVE_POLL_MS = 10_000;
 const ARCHIVE_WAIT_MS = 3 * 60_000;
 /** An archived shot that started this close to the run is the run. */
 const ARCHIVE_MATCH_S = 30;
+/** A weighing is steady once the scale has moved less than this over the window. */
+const STEADY_G = 0.3;
+const STEADY_MS = 1500;
 
 const PLUS = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M7.5 24.5H40.5M24 8V41"/></svg>`;
 const MINUS = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M7.5 24.5H40.5"/></svg>`;
 
-/** "Zbývá 298 g" and "vydrží 4 dny / 12 shotů": what the bag has left, by weight, then by time and coffees. */
+/**
+ * "Zbývá 298 g" and "vydrží 4 dny / 12 shotů": what the bag has left, by
+ * weight, then by time and coffees. The row is the way into weighing it.
+ */
 function stockRow(stock, dose) {
+  const known = stock.remaining_g != null;
   const lasts = [];
-  if (stock.days_left != null) lasts.push(t("kiosk.stock.lasts", { days: tn("kiosk.stock.days", stock.days_left) }));
-  if (dose > 0) lasts.push(tn("kiosk.stock.shots", Math.floor(stock.remaining_g / dose)));
+  if (known && stock.days_left != null) lasts.push(t("kiosk.stock.lasts", { days: tn("kiosk.stock.days", stock.days_left) }));
+  if (known && dose > 0) lasts.push(tn("kiosk.stock.shots", Math.floor(stock.remaining_g / dose)));
   return `
-        <div class="stock">
-          <span class="pill ${stock.low ? "warn" : ""}">${t("kiosk.stock.left", { g: stock.remaining_g })}</span>
+        <button type="button" class="stock" data-calib-open>
+          <span class="pill ${stock.low ? "warn" : ""}">${known ? t("kiosk.stock.left", { g: stock.remaining_g }) : t("kiosk.calib.start")}</span>
           <span>${lasts.join(" / ")}</span>
-        </div>`;
+        </button>`;
+}
+
+function calibrationCard() {
+  return `
+    <section class="card kiosk-calib-card">
+      <div class="card-head"><h2>${t("kiosk.calib.title")}</h2><span class="pill" data-calib="scale"></span></div>
+      <p class="hint" data-calib="hint"></p>
+      <div class="weight num"><b data-calib="weight">–</b><small>g</small></div>
+      <p class="sub" data-calib="sub"></p>
+      <div class="actions">
+        <button type="button" class="btn" data-calib-act="cancel">${t("kiosk.calib.cancel")}</button>
+        <button type="button" class="btn" data-calib-act="back" hidden>${t("kiosk.calib.back")}</button>
+        <button type="button" class="btn primary" data-calib-act="next"></button>
+      </div>
+    </section>`;
 }
 
 function tile(key, label, unit) {
@@ -76,7 +98,7 @@ function homeScreen(data, grind) {
           <div class="num">${s.dose_g != null ? s.dose_g + "g" : "–"}</div>
         </div>
       </div>
-      ${data.stock?.remaining_g != null ? stockRow(data.stock, s.dose_g) : ""}` : `<div><h2>${t("now.brewing")}</h2><p class="muted">${t("now.no_setup")}</p></div>`;
+      ${data.stock ? stockRow(data.stock, s.dose_g) : ""}` : `<div><h2>${t("now.brewing")}</h2><p class="muted">${t("now.no_setup")}</p></div>`;
   return `
     <div class="kiosk-left">
       <section class="card kiosk-home">${coffee}</section>
@@ -174,6 +196,7 @@ export async function renderKiosk(view) {
       <div class="kiosk-live"><div class="kiosk-live-track">
         <div class="kiosk-live-pane">${liveCard()}</div><div class="kiosk-live-pane">${summaryCard()}</div>
       </div></div>
+      <div class="kiosk-calib">${calibrationCard()}</div>
     </div>`;
   const frame = view.querySelector(".kiosk-frame");
   const track = view.querySelector(".kiosk-track");
@@ -275,6 +298,8 @@ export async function renderKiosk(view) {
 
   const enterLive = (key) => {
     clearTimers();
+    // A coffee pulled mid-weighing ends the weighing: the scale is the cup's now.
+    closeCalib();
     // A grind pressed just before the pull is saved now, not left under the layer.
     if (saveTimer) { clearTimeout(saveTimer); saveGrind(); }
     if (start?.dragging) { track.classList.remove("dragging"); place(); }
@@ -382,6 +407,85 @@ export async function renderKiosk(view) {
     }
   };
 
+  // ---- weighing what is left of the bag ------------------------------------
+  // The machine's Bluetooth scale, read from the live stream (status.weight):
+  // first the empty container, kept here as the tare (firmware 1.9.0 has no
+  // remote tare), then the beans poured in. The scale only connects while the
+  // machine is on and out of standby, so the card says what is missing.
+  const calibLayer = view.querySelector(".kiosk-calib");
+  const calibCell = (key) => calibLayer.querySelector(`[data-calib="${key}"]`);
+  const calibAct = (key) => calibLayer.querySelector(`[data-calib-act="${key}"]`);
+  /** null while closed; "tare" (the container) or "fill" (the beans). */
+  let calib = null;
+  let tare = 0;
+  /** Recent scale readings, to tell a settled weight from one still moving. */
+  let readings = [];
+
+  const net = () => Math.round(((status?.weight ?? 0) - tare) * 10) / 10;
+  const steady = () => {
+    const now = Date.now();
+    if (!readings.length || now - readings[0].t < STEADY_MS) return false;
+    const values = readings.filter((r) => now - r.t <= STEADY_MS).map((r) => r.g);
+    return values.length >= 3 && Math.max(...values) - Math.min(...values) <= STEADY_G;
+  };
+  const paintCalib = () => {
+    if (!calib) return;
+    const machine = status != null && status.mode !== "standby";
+    const scale = machine && status.scale?.connected === true;
+    const battery = status?.scale?.battery;
+    calibCell("scale").textContent = battery != null ? t("kiosk.calib.scale", { pct: battery }) : t("kiosk.calib.scale_unknown");
+    calibCell("scale").hidden = !scale;
+    calibCell("hint").textContent = !machine ? t("kiosk.calib.no_machine")
+      : !scale ? t("kiosk.calib.no_scale")
+      : t(calib === "tare" ? "kiosk.calib.tare_hint" : "kiosk.calib.fill_hint");
+    calibCell("weight").textContent = !scale ? "–" : (calib === "tare" ? Math.round((status.weight ?? 0) * 10) / 10 : net()).toFixed(1);
+    const held = latest.stock?.remaining_g;
+    const notes = [];
+    if (calib === "fill") notes.push(t("kiosk.calib.tare_info", { g: tare.toFixed(1) }));
+    if (held != null) notes.push(t("kiosk.calib.was", { g: held }));
+    if (scale && !steady()) notes.push(t("kiosk.calib.settling"));
+    calibCell("sub").textContent = notes.join(" · ");
+    calibAct("back").hidden = calib !== "fill";
+    const next = calibAct("next");
+    next.textContent = calib === "tare" ? t("kiosk.calib.tare_btn") : t("kiosk.calib.save_btn", { g: net().toFixed(1) });
+    next.disabled = !scale || !steady() || (calib === "fill" && net() <= 0);
+  };
+  const openCalib = () => {
+    if (mode !== "normal" || !latest.setup?.coffee_id) return;
+    // A grind pressed just before is saved, not left behind the card.
+    if (saveTimer) { clearTimeout(saveTimer); saveGrind(); }
+    calib = "tare";
+    tare = 0;
+    calibLayer.classList.add("show");
+    paintCalib();
+  };
+  const closeCalib = () => {
+    calib = null;
+    calibLayer.classList.remove("show");
+  };
+  const onCalibAction = async (key) => {
+    if (key === "cancel") return closeCalib();
+    if (key === "back") { calib = "tare"; tare = 0; return paintCalib(); }
+    if (calib === "tare") {
+      tare = Math.round((status?.weight ?? 0) * 10) / 10;
+      calib = "fill";
+      // The beans start moving the scale now; only readings from here on count as settled.
+      readings = [];
+      return paintCalib();
+    }
+    const grams = net();
+    calibAct("next").disabled = true;
+    try {
+      await api.calibrateStock(grams);
+      toast(t("kiosk.calib.saved", { g: grams.toFixed(1) }));
+      closeCalib();
+      await refresh();
+    } catch (err) {
+      toast(err.message, "bad");
+      paintCalib();
+    }
+  };
+
   // ---- swipe -------------------------------------------------------------
   // Touch events with touch-action: none — the page, not the browser, decides
   // what a drag is (mouse too, for a desktop browser; WPE also sends a mouse
@@ -399,7 +503,7 @@ export async function renderKiosk(view) {
     const p = point(e);
     // Over the live layer a touch moves nothing: it is locked while the
     // coffee runs, and on the summary any touch is the way back.
-    start = { x: p.clientX, y: p.clientY, dragging: false, layer: mode !== "normal", mode };
+    start = { x: p.clientX, y: p.clientY, dragging: false, layer: mode !== "normal" || calib != null, mode };
   };
   const onMove = (e) => {
     if (!start || start.layer || isEcho(e)) return;
@@ -447,6 +551,10 @@ export async function renderKiosk(view) {
     if (swallowClick) { swallowClick = false; e.preventDefault(); e.stopPropagation(); }
   };
   const onClick = (e) => {
+    const act = e.target.closest("[data-calib-act]");
+    if (act) return onCalibAction(act.dataset.calibAct);
+    if (calib) return;
+    if (e.target.closest("[data-calib-open]")) return openCalib();
     const grind = e.target.closest("[data-grind]");
     if (grind) stepGrind(Number(grind.dataset.grind));
   };
@@ -469,8 +577,16 @@ export async function renderKiosk(view) {
   let subscribing = true;
   const stopLive = watchLive({
     onRun: (samples) => { if (!subscribing) onRun(samples); },
-    onStatus: (next) => { status = next; paintTiles(); },
-    onOffline: () => { liveCell("offline").hidden = false; status = null; paintTiles(); },
+    onStatus: (next) => {
+      status = next;
+      if (next.scale?.connected) {
+        readings.push({ t: Date.now(), g: next.weight ?? 0 });
+        readings = readings.filter((r) => Date.now() - r.t <= STEADY_MS * 2);
+      } else readings = [];
+      paintTiles();
+      paintCalib();
+    },
+    onOffline: () => { liveCell("offline").hidden = false; status = null; readings = []; paintTiles(); paintCalib(); },
     onOnline: () => (liveCell("offline").hidden = true),
   });
   subscribing = false;

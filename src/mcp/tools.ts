@@ -16,7 +16,7 @@ import { groupSettings } from "../device/machineSettings.js";
 import { PHASE_ARRAY_SCHEMA } from "./profileSchema.js";
 import { recordSetup, moveSetup, updateSetup } from "../setups.js";
 import { listCoffees, coffeeSummary, createCoffee, updateCoffee } from "../coffees.js";
-import { agingPoints, bags, currentStock } from "../coffeeStats.js";
+import { agingPoints, bags, calibrateStock, currentStock } from "../coffeeStats.js";
 import { suggestFor, verdictFor } from "../dialin.js";
 import { getAnalysis } from "../anomaly.js";
 import { exportSetupCard, importSetupCard } from "../setupCard.js";
@@ -169,6 +169,18 @@ export const TOOLS: Tool[] = [
         note: { type: "string" },
         archived: { type: "boolean", description: "Hide from pickers; history keeps it" },
       },
+    },
+  },
+  {
+    name: "calibrate_stock",
+    description:
+      "Record what is left of the bag being ground from now, weighed, in grams. The remaining stock then counts " +
+      "down from this weighing (minus the doses pulled after it) instead of from the bag weight minus every dose, " +
+      "which misses purges, grinder retention and spills. Returns the new stock.",
+    inputSchema: {
+      type: "object",
+      properties: { measured_g: { type: "number", description: "Grams of beans left, container excluded" } },
+      required: ["measured_g"],
     },
   },
   {
@@ -592,6 +604,13 @@ export async function callTool(db: DatabaseSync, name: string, args: ToolArgs): 
         return ok({ coffee, setups, shots, bags: bags(db, getCoffee(db, coffee.id)!), aging: agingPoints(db, coffee.id) });
       }
 
+      case "calibrate_stock": {
+        try {
+          return ok({ stock: calibrateStock(db, Number(args?.measured_g)) });
+        } catch (error) {
+          return fail(error instanceof Error ? error.message : String(error), "INVALID");
+        }
+      }
       case "save_coffee": {
         const { coffee_id, ...input } = (args ?? {}) as any;
         try {

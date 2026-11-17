@@ -57,6 +57,9 @@ export interface Bag {
   days_left: number | null;
   /** The current setup grinds from this bag. */
   current: boolean;
+  /** The latest weighing of what was left, if any: remaining counts down from it. */
+  calibrated_g: number | null;
+  calibrated_at: number | null;
 }
 
 export function bags(db: DatabaseSync, coffee: CoffeeRow): Bag[] {
@@ -71,10 +74,22 @@ export function bags(db: DatabaseSync, coffee: CoffeeRow): Bag[] {
     `SELECT COUNT(*) AS shots, SUM(dose_g) AS used_g, MAX(started_at) AS last_at
      FROM shot_context WHERE coffee_id = ? AND roast_date IS ?`
   );
+  const calibration = db.prepare(
+    `SELECT measured_g, measured_at FROM stock_calibrations
+     WHERE coffee_id = ? AND roast_date IS ? ORDER BY measured_at DESC, id DESC LIMIT 1`
+  );
+  const usedSince = db.prepare(
+    `SELECT SUM(dose_g) AS g FROM shot_context WHERE coffee_id = ? AND roast_date IS ? AND started_at > ?`
+  );
   const rows = groups.map((g) => {
     const u = usage.get(coffee.id, g.roast_date) as { shots: number; used_g: number | null; last_at: number | null };
     const used = u.shots > 0 ? u.used_g : 0;
-    const remaining = coffee.bag_g != null && used != null ? Math.max(0, coffee.bag_g - used) : null;
+    // A weighing replaces the arithmetic up to it: only the doses after it
+    // still count, and it needs no bag weight at all.
+    const cal = calibration.get(coffee.id, g.roast_date) as { measured_g: number; measured_at: number } | undefined;
+    const remaining = cal
+      ? Math.max(0, cal.measured_g - ((usedSince.get(coffee.id, g.roast_date, cal.measured_at) as { g: number | null }).g ?? 0))
+      : coffee.bag_g != null && used != null ? Math.max(0, coffee.bag_g - used) : null;
     // Rate over the span actually brewed from, at least a day, so a bag
     // opened this morning does not extrapolate one shot into a kilo a week.
     const spanDays = u.last_at ? Math.max(1, (u.last_at - g.opened_at) / 86400) : null;
@@ -90,6 +105,8 @@ export function bags(db: DatabaseSync, coffee: CoffeeRow): Bag[] {
       g_per_day: rate != null ? Math.round(rate * 10) / 10 : null,
       days_left: remaining != null && rate ? Math.round(remaining / rate) : null,
       current: current?.coffee_id === coffee.id && (current.roast_date ?? null) === g.roast_date,
+      calibrated_g: cal?.measured_g ?? null,
+      calibrated_at: cal?.measured_at ?? null,
     };
   });
   // Periods without a roast date and without shots are not a bag anyone
@@ -115,6 +132,8 @@ export interface Stock {
   /** Remaining is known and under the threshold. */
   low: boolean;
   warn_g: number;
+  /** When what is left was last weighed; null when remaining is bag weight minus doses. */
+  calibrated_at: number | null;
 }
 
 /** The bag being ground from right now, or null when no coffee is set. */
@@ -137,5 +156,25 @@ export function currentStock(db: DatabaseSync): Stock | null {
     days_left: bag?.days_left ?? null,
     low: bag?.remaining_g != null && bag.remaining_g < warn,
     warn_g: warn,
+    calibrated_at: bag?.calibrated_at ?? null,
   };
+}
+
+/** A weighing heavier than this is a typo or a scale with something else on it. */
+const MAX_CALIBRATION_G = 5000;
+
+/**
+ * Record what is left of the bag being ground from now, weighed: the
+ * remaining stock counts down from it from then on. Returns the new stock.
+ */
+export function calibrateStock(db: DatabaseSync, measuredG: number, at = Math.floor(Date.now() / 1000)): Stock {
+  if (!Number.isFinite(measuredG) || measuredG < 0 || measuredG > MAX_CALIBRATION_G) {
+    throw new Error(`measured_g must be between 0 and ${MAX_CALIBRATION_G}`);
+  }
+  const setup = currentSetup(db);
+  if (!setup?.coffee_id) throw new Error("No coffee is set up: there is no bag to weigh");
+  db.prepare("INSERT INTO stock_calibrations (coffee_id, roast_date, measured_g, measured_at) VALUES (?, ?, ?, ?)").run(
+    setup.coffee_id, setup.roast_date ?? null, Math.round(measuredG * 10) / 10, at
+  );
+  return currentStock(db)!;
 }
