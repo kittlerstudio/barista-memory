@@ -289,8 +289,9 @@ export async function renderKiosk(view) {
     return liveChart(box, { height: Math.max(120, box.clientHeight) });
   };
   const clearTimers = () => {
-    clearTimeout(summaryTimer); clearTimeout(keepTimer); clearTimeout(archiveTimer);
-    summaryTimer = keepTimer = archiveTimer = null;
+    // The archive poll is not among them: it outlives a dismissed summary (see pollArchive).
+    clearTimeout(summaryTimer); clearTimeout(keepTimer);
+    summaryTimer = keepTimer = null;
   };
   /** Shows the layer on `pane` (0 live, 1 summary): a slide when it is already up. */
   const showPane = (pane) => {
@@ -344,28 +345,36 @@ export async function renderKiosk(view) {
   };
 
   // The live figures are the scale's raw reading; once ingest has the shot,
-  // its stable weight, ratio and duration replace them.
+  // its stable weight, ratio and duration replace them. The archived shot is
+  // also what the stock counts down by, so the screens reload then instead of
+  // at the next minute's refresh, even if the summary was swiped away first.
   const pollArchive = (until) => {
+    clearTimeout(archiveTimer);
+    const key = runKey;
+    const startedAt = summary.startedAt;
     archiveTimer = setTimeout(async () => {
       archiveTimer = null;
-      const key = runKey;
+      if (runKey !== key) return;
       try {
-        const { shots } = await api.shots({ since: summary.startedAt - 60, limit: 1 });
+        const { shots } = await api.shots({ since: startedAt - 60, limit: 1 });
         const shot = shots?.[0];
-        if (mode !== "summary" || runKey !== key) return;
-        if (shot && Math.abs(shot.started_at - summary.startedAt) <= ARCHIVE_MATCH_S) {
-          summary = {
-            ...summary,
-            archived: true,
-            seconds: shot.duration_ms != null ? shot.duration_ms / 1000 : summary.seconds,
-            weight: shot.stable_weight_g ?? shot.final_weight_g ?? summary.weight,
-            ratio: shot.ratio ?? summary.ratio,
-          };
-          paintSummary();
+        if (runKey !== key) return;
+        if (shot && Math.abs(shot.started_at - startedAt) <= ARCHIVE_MATCH_S) {
+          if (mode === "summary") {
+            summary = {
+              ...summary,
+              archived: true,
+              seconds: shot.duration_ms != null ? shot.duration_ms / 1000 : summary.seconds,
+              weight: shot.stable_weight_g ?? shot.final_weight_g ?? summary.weight,
+              ratio: shot.ratio ?? summary.ratio,
+            };
+            paintSummary();
+          }
+          await refresh();
           return;
         }
       } catch { /* the next poll tries again */ }
-      if (mode === "summary" && runKey === key && Date.now() < until) pollArchive(until);
+      if (runKey === key && Date.now() < until) pollArchive(until);
     }, ARCHIVE_POLL_MS);
   };
 
@@ -606,6 +615,7 @@ export async function renderKiosk(view) {
     liveView?.destroy();
     summaryView?.destroy();
     clearInterval(timer);
+    clearTimeout(archiveTimer);
     // A pressed grind is saved on the way out, not dropped.
     if (saveTimer) { clearTimeout(saveTimer); saveGrind(); }
     view.removeEventListener("click", onClick);
